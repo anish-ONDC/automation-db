@@ -105,6 +105,34 @@ describe("GET /api/sessions/portal/:orgId", () => {
         expect(ids(await list("?status=expired"))).toEqual(["gone"]);
     });
 
+    it("filters older sessions with no last activity by updatedAt, as the list shows them", async () => {
+        const older = (sessionId: string, updatedAt: Date) =>
+            SessionDetails.collection.insertOne({
+                sessionId,
+                orgId: ORG,
+                npType: "BAP",
+                sessionType: "AUTOMATION",
+                createdAt: updatedAt,
+                updatedAt,
+            });
+        await older("old-live", ago(DAY));
+        await older("old-gone", ago(10 * DAY));
+        await session("new-live", { lastActivityAt: ago(DAY), updatedAt: ago(10 * DAY) });
+
+        const body = await list();
+        const status = (id: string) =>
+            body.sessions.find((s: any) => s.sessionId === id).status;
+        expect(status("old-live")).toBe("active");
+        expect(status("old-gone")).toBe("expired");
+
+        expect(ids(await list("?status=active"))).toEqual(["new-live", "old-live"]);
+        expect(ids(await list("?status=expired"))).toEqual(["old-gone"]);
+        const from = ago(2 * DAY).toISOString();
+        expect(ids(await list(`?lastActivityFrom=${from}`))).toEqual(["new-live", "old-live"]);
+        expect(ids(await list(`?lastActivityTo=${from}`))).toEqual(["old-gone"]);
+        expect(ids(await list(`?status=active&q=old`))).toEqual(["old-live"]);
+    });
+
     it("combines different filters with AND and repeats with OR", async () => {
         await session("a", { domain: "ONDC:RET10", npType: "BAP" });
         await session("b", { domain: "ONDC:RET11", npType: "BAP" });

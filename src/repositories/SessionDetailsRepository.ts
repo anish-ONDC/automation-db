@@ -914,18 +914,27 @@ export class SessionDetailsRepository {
     if (query.createdFrom || query.createdTo) {
       filter.createdAt = range(query.createdFrom, query.createdTo);
     }
+    // Sessions made before the Portal API have no lastActivityAt, so updatedAt
+    // stands in, as in toPortalSession.
+    const lastActivity = (condition: Record<string, Date>) => ({
+      $or: [
+        { lastActivityAt: condition },
+        { lastActivityAt: null, updatedAt: condition },
+      ],
+    });
     const activity: Record<string, unknown>[] = [];
     if (query.lastActivityFrom || query.lastActivityTo) {
-      activity.push({
-        lastActivityAt: range(query.lastActivityFrom, query.lastActivityTo),
-      });
+      activity.push(
+        lastActivity(range(query.lastActivityFrom, query.lastActivityTo)),
+      );
     }
     if (query.status) {
       const cutoff = new Date(Date.now() - SESSION_ACTIVE_MS);
-      activity.push({
-        lastActivityAt:
+      activity.push(
+        lastActivity(
           query.status === "active" ? { $gte: cutoff } : { $lt: cutoff },
-      });
+        ),
+      );
     }
     if (activity.length) filter.$and = activity;
 
